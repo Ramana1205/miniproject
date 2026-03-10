@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chess · AI</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Courier+Prime:wght@400;700&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --ink:#1a1612;
+  --stone:#f5f0e8;
+  --warm:#ede4d0;
+  --rule:#c8bfa8;
+  --muted:#8a8070;
+  --light-sq:#f0e8d0;
+  --dark-sq:#b8a888;
+  --select:rgba(80,120,80,0.38);
+  --legal:rgba(50,90,50,0.20);
+  --last:rgba(200,160,40,0.30);
+  --check:rgba(180,40,40,0.38);
+  --serif:'Cormorant Garamond',Georgia,serif;
+  --mono:'Courier Prime',monospace;
+}
+
+html,body{min-height:100%;background:var(--stone);color:var(--ink);font-family:var(--serif)}
+
+body{
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  min-height:100vh;padding:24px 16px;
+}
+
+header{text-align:center;margin-bottom:28px}
+
+h1{
+  font-size:12px;font-weight:300;
+  letter-spacing:.55em;text-transform:uppercase;color:var(--muted);
+}
+
+.rule-line{width:48px;height:1px;background:var(--rule);margin:10px auto}
+
+.layout{display:flex;gap:32px;align-items:flex-start}
+
+.board-wrap{position:relative;user-select:none}
+
+.coord-row{display:flex;padding:0 20px}
+
+.coord-col{
+  display:flex;flex-direction:column;justify-content:space-around;
+  width:20px;height:480px;text-align:center;
+}
+
+.coord{font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+#board{
+  display:grid;
+  grid-template-columns:repeat(8,60px);
+  grid-template-rows:repeat(8,60px);
+  border:1px solid var(--rule);
+  box-shadow:0 4px 32px rgba(26,22,18,0.10);
+}
+
+.sq{
+  width:60px;height:60px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;position:relative;font-size:38px;line-height:1;
+  transition:filter .12s;
+}
+.sq.light{background:var(--light-sq)}
+.sq.dark{background:var(--dark-sq)}
+.sq.selected{background:var(--select)!important}
+.sq.last-move{background:var(--last)!important}
+.sq.in-check{background:var(--check)!important}
+.sq:hover{filter:brightness(1.07)}
+
+.sq.legal::after{
+  content:'';position:absolute;
+  width:20px;height:20px;border-radius:50%;
+  background:var(--legal);pointer-events:none;
+}
+.sq.legal.has-piece::after{
+  width:100%;height:100%;border-radius:0;
+  background:transparent;
+  box-shadow:inset 0 0 0 3px rgba(50,90,50,0.45);
+}
+
+.piece{pointer-events:none}
+
+.sidebar{width:196px;display:flex;flex-direction:column;gap:16px;padding-top:4px}
+
+.panel{border:1px solid var(--rule);padding:14px 16px;background:var(--warm)}
+
+.panel-label{
+  font-size:9px;letter-spacing:.35em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:10px;font-family:var(--mono);
+}
+
+.turn-row{display:flex;align-items:center;gap:10px}
+
+.turn-dot{
+  width:11px;height:11px;border-radius:50%;
+  border:1px solid var(--rule);flex-shrink:0;transition:background .3s;
+}
+.turn-dot.white{background:#fff}
+.turn-dot.black{background:var(--ink)}
+
+.turn-text{font-size:14px;font-weight:300;letter-spacing:.04em}
+
+.thinking{
+  font-family:var(--mono);font-size:9px;letter-spacing:.15em;
+  color:var(--muted);margin-top:6px;opacity:0;transition:opacity .2s;
+}
+.thinking.show{opacity:1}
+
+.diff-row{display:flex;gap:6px}
+
+.diff-btn{
+  flex:1;padding:6px 0;font-family:var(--mono);
+  font-size:10px;letter-spacing:.08em;
+  border:1px solid var(--rule);background:transparent;
+  color:var(--muted);cursor:pointer;transition:all .15s;
+}
+.diff-btn:hover{border-color:var(--ink);color:var(--ink)}
+.diff-btn.active{background:var(--ink);color:var(--stone);border-color:var(--ink)}
+
+.status-text{font-size:13px;font-style:italic;color:var(--muted);min-height:20px}
+
+.captured{font-size:17px;letter-spacing:1px;min-height:22px;line-height:1.2}
+
+.move-log{
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+  height:116px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;
+}
+.move-log::-webkit-scrollbar{width:2px}
+.move-log::-webkit-scrollbar-thumb{background:var(--rule)}
+
+.move-entry{display:grid;grid-template-columns:22px 1fr 1fr;gap:4px;padding:1px 0}
+.move-num{color:var(--rule)}
+.move-w{color:var(--ink)}
+.move-b{color:var(--muted)}
+
+.new-btn{
+  width:100%;padding:10px;font-family:var(--mono);
+  font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  border:1px solid var(--ink);background:transparent;
+  color:var(--ink);cursor:pointer;transition:all .2s;
+}
+.new-btn:hover{background:var(--ink);color:var(--stone)}
+
+.overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(245,240,232,0.90);z-index:50;
+  align-items:center;justify-content:center;
+  flex-direction:column;gap:14px;
+}
+.overlay.show{display:flex}
+.overlay-title{font-size:34px;font-weight:300;font-style:italic;letter-spacing:.06em}
+.overlay-sub{font-size:11px;letter-spacing:.35em;color:var(--muted);font-family:var(--mono)}
+.overlay-btn{
+  margin-top:6px;padding:10px 32px;font-family:var(--mono);
+  font-size:11px;letter-spacing:.2em;
+  border:1px solid var(--ink);background:transparent;
+  color:var(--ink);cursor:pointer;transition:all .2s;
+}
+.overlay-btn:hover{background:var(--ink);color:var(--stone)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Chess &middot; AI</h1>
+  <div class="rule-line"></div>
+</header>
+
+<div class="layout">
+
+  <div class="board-wrap">
+    <div class="coord-row" id="coord-top"></div>
+    <div style="display:flex">
+      <div class="coord-col" id="coord-left"></div>
+      <div id="board"></div>
+      <div class="coord-col" id="coord-right"></div>
+    </div>
+    <div class="coord-row" id="coord-bottom"></div>
+  </div>
+
+  <div class="sidebar">
+
+    <div class="panel">
+      <div class="panel-label">Turn</div>
+      <div class="turn-row">
+        <div class="turn-dot white" id="turn-dot"></div>
+        <div class="turn-text" id="turn-text">White (You)</div>
+      </div>
+      <div class="thinking" id="thinking">THINKING...</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-label">Difficulty</div>
+      <div class="diff-row">
+        <button class="diff-btn active" data-depth="2">Easy</button>
+        <button class="diff-btn"        data-depth="3">Med</button>
+        <button class="diff-btn"        data-depth="4">Hard</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-label">Status</div>
+      <div class="status-text" id="status">Your move</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-label">Captured</div>
+      <div class="captured" id="cap-white" style="margin-bottom:4px"></div>
+      <div class="captured" id="cap-black"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-label">Move Log</div>
+      <div class="move-log" id="move-log"></div>
+    </div>
+
+    <button class="new-btn" id="new-btn">New Game</button>
+
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="overlay-title" id="overlay-title">Checkmate</div>
+  <div class="overlay-sub"   id="overlay-sub">WHITE WINS</div>
+  <button class="overlay-btn" id="overlay-btn">Play Again</button>
+</div>
+
+<script>
+const UNICODE={
+  K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙',
+  k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟',
+};
+
+let G={
+  fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+  selected:null,legalMoves:[],lastMove:null,
+  inCheck:false,difficulty:2,
+  history:[],capWhite:[],capBlack:[],locked:false,
+};
+
+function fenPieces(fen){
+  const board=Array(64).fill(null);
+  const rows=fen.split(' ')[0].split('/');
+  rows.forEach((row,r)=>{
+    let c=0;
+    for(const ch of row){
+      if(isNaN(ch)){board[r*8+c]=ch;c++;}
+      else c+=parseInt(ch);
+    }
+  });
+  return board;
+}
+
+function isWhiteTurn(fen){return fen.split(' ')[1]==='w'}
+
+function sqName(idx){
+  return String.fromCharCode(97+idx%8)+(8-Math.floor(idx/8));
+}
+
+function sqIdx(name){
+  return(7-(parseInt(name[1])-1))*8+(name.charCodeAt(0)-97);
+}
+
+function buildCoords(){
+  const files=['a','b','c','d','e','f','g','h'];
+  const ranks=['8','7','6','5','4','3','2','1'];
+  ['coord-top','coord-bottom'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.innerHTML='';
+    el.style.cssText='display:flex;padding:0 20px;margin:4px 0;';
+    files.forEach(f=>{
+      const d=document.createElement('div');
+      d.className='coord';
+      d.style.cssText='width:60px;text-align:center;';
+      d.textContent=f;
+      el.appendChild(d);
+    });
+  });
+  ['coord-left','coord-right'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.innerHTML='';
+    ranks.forEach(r=>{
+      const d=document.createElement('div');
+      d.className='coord';
+      d.textContent=r;
+      el.appendChild(d);
+    });
+  });
+}
+
+function render(){
+  const boardEl=document.getElementById('board');
+  const pieces=fenPieces(G.fen);
+  const whiteT=isWhiteTurn(G.fen);
+  const lastFrom=G.lastMove?sqIdx(G.lastMove.slice(0,2)):-1;
+  const lastTo=G.lastMove?sqIdx(G.lastMove.slice(2,4)):-1;
+  const kingCheck=G.inCheck?pieces.indexOf(whiteT?'K':'k'):-1;
+
+  boardEl.innerHTML='';
+  for(let i=0;i<64;i++){
+    const sq=document.createElement('div');
+    const file=i%8,rank=Math.floor(i/8);
+    sq.className='sq '+((rank+file)%2===0?'light':'dark');
+    if(i===lastFrom||i===lastTo) sq.classList.add('last-move');
+    if(i===G.selected)           sq.classList.add('selected');
+    if(i===kingCheck)            sq.classList.add('in-check');
+    const name=sqName(i);
+    const isLegal=G.selected!==null&&G.legalMoves.some(m=>m.slice(2,4)===name);
+    if(isLegal){
+      sq.classList.add('legal');
+      if(pieces[i]) sq.classList.add('has-piece');
+    }
+    if(pieces[i]){
+      const span=document.createElement('span');
+      span.className='piece';
+      span.textContent=UNICODE[pieces[i]]||'';
+      sq.appendChild(span);
+    }
+    sq.addEventListener('click',()=>onSquareClick(i,pieces,whiteT));
+    boardEl.appendChild(sq);
+  }
+  const dot=document.getElementById('turn-dot');
+  const txt=document.getElementById('turn-text');
+  dot.className='turn-dot '+(whiteT?'white':'black');
+  txt.textContent=whiteT?'White (You)':'Black (AI)';
+  document.getElementById('status').textContent=whiteT?'Your move':'AI thinking…';
+}
+
+async function onSquareClick(idx,pieces,whiteT){
+  if(G.locked||!whiteT) return;
+  const name=sqName(idx);
+  const piece=pieces[idx];
+
+  if(G.selected===null){
+    if(!piece||piece===piece.toLowerCase()) return;
+    G.selected=idx;
+    const res=await fetch('/api/legal-moves',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fen:G.fen,square:name}),
+    });
+    G.legalMoves=(await res.json()).moves;
+    render();
+    return;
+  }
+
+  if(G.selected===idx){G.selected=null;G.legalMoves=[];render();return;}
+
+  const from=sqName(G.selected);
+  const uci=from+name;
+  const isLegal=G.legalMoves.some(m=>m.startsWith(uci));
+
+  if(!isLegal){
+    if(piece&&piece===piece.toUpperCase()){
+      G.selected=idx;
+      const res=await fetch('/api/legal-moves',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({fen:G.fen,square:name}),
+      });
+      G.legalMoves=(await res.json()).moves;
+    } else {
+      G.selected=null;G.legalMoves=[];
+    }
+    render();
+    return;
+  }
+
+  const movingPiece=pieces[G.selected];
+  const finalUci=(movingPiece==='P'&&name[1]==='8')?uci+'q':uci;
+  await doMove(finalUci,pieces);
+}
+
+async function doMove(uci,pieces){
+  G.locked=true;G.selected=null;G.legalMoves=[];
+  recordCapture(uci,pieces,true);
+  document.getElementById('thinking').classList.add('show');
+
+  const res=await fetch('/api/move',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({fen:G.fen,move:uci,difficulty:G.difficulty}),
+  });
+  const data=await res.json();
+  const newPieces=fenPieces(data.fen);
+  if(data.ai_move) recordCapture(data.ai_move,newPieces,false);
+  logMove(uci,data.ai_move,pieces);
+
+  G.fen=data.fen;
+  G.lastMove=data.ai_move||uci;
+  G.inCheck=data.in_check;
+
+  document.getElementById('thinking').classList.remove('show');
+  render();
+  G.locked=false;
+  if(data.result) showOver(data.result);
+}
+
+function recordCapture(uci,pieces,byPlayer){
+  const toIdx=sqIdx(uci.slice(2,4));
+  const victim=pieces[toIdx];
+  if(!victim||victim.toLowerCase()==='k') return;
+  if(byPlayer) G.capWhite.push(UNICODE[victim]);
+  else         G.capBlack.push(UNICODE[victim]);
+  document.getElementById('cap-white').textContent=G.capWhite.join('');
+  document.getElementById('cap-black').textContent=G.capBlack.join('');
+}
+
+function logMove(playerUci,aiUci,pieces){
+  const num=Math.floor(G.history.length/2)+1;
+  G.history.push({
+    num,
+    white:toNotation(playerUci,pieces),
+    black:aiUci?toNotation(aiUci,fenPieces(G.fen)):'',
+  });
+  const log=document.getElementById('move-log');
+  log.innerHTML='';
+  G.history.slice(-20).forEach(e=>{
+    const row=document.createElement('div');
+    row.className='move-entry';
+    row.innerHTML=`<span class="move-num">${e.num}.</span><span class="move-w">${e.white}</span><span class="move-b">${e.black}</span>`;
+    log.appendChild(row);
+  });
+  log.scrollTop=log.scrollHeight;
+}
+
+function toNotation(uci,pieces){
+  if(!uci) return '';
+  const from=uci.slice(0,2),to=uci.slice(2,4);
+  const piece=pieces[sqIdx(from)];
+  if(!piece) return uci;
+  const letter=piece.toUpperCase()==='P'?'':piece.toUpperCase();
+  return letter+to+(uci[4]?'=Q':'');
+}
+
+function showOver(result){
+  const titles={white_wins:'Checkmate',black_wins:'Checkmate',draw:'Draw'};
+  const subs  ={white_wins:'YOU WIN',  black_wins:'AI WINS',  draw:'STALEMATE'};
+  document.getElementById('overlay-title').textContent=titles[result];
+  document.getElementById('overlay-sub').textContent  =subs[result];
+  document.getElementById('overlay').classList.add('show');
+}
+
+async function newGame(){
+  const res=await fetch('/api/new-game',{method:'POST'});
+  const data=await res.json();
+  G={
+    fen:data.fen,selected:null,legalMoves:[],lastMove:null,
+    inCheck:false,difficulty:G.difficulty,
+    history:[],capWhite:[],capBlack:[],locked:false,
+  };
+  document.getElementById('cap-white').textContent='';
+  document.getElementById('cap-black').textContent='';
+  document.getElementById('move-log').innerHTML='';
+  document.getElementById('overlay').classList.remove('show');
+  render();
+}
+
+document.getElementById('new-btn').addEventListener('click',newGame);
+document.getElementById('overlay-btn').addEventListener('click',newGame);
+document.querySelectorAll('.diff-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.diff-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    G.difficulty=parseInt(btn.dataset.depth);
+  });
+});
+
+buildCoords();
+render();
+</script>
+</body>
+</html>
